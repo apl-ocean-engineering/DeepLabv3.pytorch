@@ -5,7 +5,7 @@ import os
 import random
 import glob
 from PIL import Image
-from utils import preprocess
+from deepLabv3.utils import preprocess
 
 _FOLDERS_MAP = {
     'image': 'leftImg8bit',

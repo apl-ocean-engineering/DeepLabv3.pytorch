@@ -5,6 +5,8 @@ import torch
 import torchvision.transforms as transforms
 from PIL import Image
 
+import deepLabv3.deeplab as deeplab
+
 
 class AverageMeter(object):
   def __init__(self):
@@ -37,6 +39,34 @@ class AverageMeter(object):
     self.ema = self.ema * 0.99 + self.val * 0.01
 
 
+def load_model(args, classes):
+    model_fname = 'data/deeplab_{0}_{1}_v3_{2}_epoch%d.pth'.format(
+      args.backbone, args.dataset, args.exp)
+    if args.backbone == 'resnet101':
+        model = getattr(deeplab, 'resnet101')(
+            pretrained=(not args.scratch),
+            num_classes=len(classes),
+            num_groups=args.groups,
+            weight_std=args.weight_std,
+            beta=args.beta)
+    else:
+        raise ValueError('Unknown backbone: {}'.format(args.backbone))
+
+    return model, model_fname
+
+
+def image_fname_to_tensor(fname):
+    img = Image.open(fname).convert('RGB')
+    img = data_transforms(img)
+
+    return img
+
+def cv_image_to_tensor(img):
+    img = Image.fromarray(img)
+    img = data_transforms(img)
+
+    return img
+
 def inter_and_union(pred, mask, num_class):
   pred = np.asarray(pred, dtype=np.uint8).copy()
   mask = np.asarray(mask, dtype=np.uint8).copy()
@@ -55,6 +85,16 @@ def inter_and_union(pred, mask, num_class):
   return (area_inter, area_union)
 
 
+def data_transforms(img):
+    data_transform = transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+    ])
+    img = data_transform(img)
+
+    return img
+
+
 def preprocess(image, mask, flip=False, scale=None, crop=None):
   if flip:
     if random.random() < 0.5:
@@ -68,10 +108,11 @@ def preprocess(image, mask, flip=False, scale=None, crop=None):
     image = image.resize(new_size, Image.ANTIALIAS)
     mask = mask.resize(new_size, Image.NEAREST)
 
-  data_transforms = transforms.Compose([
-      transforms.ToTensor(),
-      transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
-    ])
+  # data_transforms = transforms.Compose([
+  #     transforms.ToTensor(),
+  #     transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+  #   ])
+  # image = data_transforms(image)
   image = data_transforms(image)
   mask = torch.LongTensor(np.array(mask).astype(np.int64))
 
@@ -99,9 +140,10 @@ def create_color_cv_image(pred, cmap):
 
     for y in range(0, pred.shape[0]):
       for x in range(0, pred.shape[1]):
+          #pass
         val = pred[y,x]
-        color = cmap[val, :]
-        img[y,x] = color
+        #color = cmap[val, :]
+        #img[y,x] = color
 
 
     return img

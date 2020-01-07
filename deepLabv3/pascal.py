@@ -3,7 +3,7 @@ from __future__ import print_function
 import torch.utils.data as data
 import os
 from PIL import Image
-from utils import preprocess
+from deepLabv3.utils import preprocess
 
 
 class VOCSegmentation(data.Dataset):
@@ -43,8 +43,8 @@ class VOCSegmentation(data.Dataset):
 
   def __getitem__(self, index):
     _fname = self.images[index]
-    _img = Image.open(self.images[index]).convert('RGB')
 
+    _img = Image.open(self.images[index]).convert('RGB')
     _target = Image.open(self.masks[index])
 
     _img, _target = preprocess(_img, _target,

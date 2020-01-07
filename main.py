@@ -1,5 +1,3 @@
-import argparse
-
 import numpy as np
 import torch
 from scipy.io import loadmat
@@ -10,57 +8,17 @@ import time
 import deepLabv3.deeplab as deeplab
 from deepLabv3.pascal import VOCSegmentation
 from deepLabv3.cityscapes import Cityscapes
-from deepLabv3.utils import AverageMeter, inter_and_union
+from deepLabv3.utils import AverageMeter, inter_and_union, load_model
 from deepLabv3.detector import Detector
-
-parser = argparse.ArgumentParser()
-parser.add_argument('--train', action='store_true', default=False,
-                    help='training mode')
-parser.add_argument('--exp', type=str, required=True,
-                    help='name of experiment')
-parser.add_argument('--gpu', type=int, default=0,
-                    help='test time gpu device id')
-parser.add_argument('--backbone', type=str, default='resnet101',
-                    help='resnet101')
-parser.add_argument('--dataset', type=str, default='pascal',
-                    help='pascal or cityscapes')
-parser.add_argument('--groups', type=int, default=None,
-                    help='num of groups for group normalization')
-parser.add_argument('--epochs', type=int, default=30,
-                    help='num of training epochs')
-parser.add_argument('--batch_size', type=int, default=4,
-                    help='batch size')
-parser.add_argument('--base_lr', type=float, default=0.00025,
-                    help='base learning rate')
-parser.add_argument('--last_mult', type=float, default=1.0,
-                    help='learning rate multiplier for last layers')
-parser.add_argument('--scratch', action='store_true', default=False,
-                    help='train from scratch')
-parser.add_argument('--freeze_bn', action='store_true', default=False,
-                    help='freeze batch normalization parameters')
-parser.add_argument('--weight_std', action='store_true', default=False,
-                    help='weight standardization')
-parser.add_argument('--beta', action='store_true', default=False,
-                    help='resnet101 beta')
-parser.add_argument('--crop_size', type=int, default=513,
-                    help='image crop size')
-parser.add_argument('--resume', type=str, default=None,
-                    help='path to checkpoint to resume from')
-parser.add_argument('--workers', type=int, default=4,
-                    help='number of data loading workers')
-parser.add_argument('--voc_path', type=str, default='data/VOCdevkit',
-                    help='Path to VOC dataset')
-parser.add_argument('--cityscape_path', type=str, default='data/cityscapes',
-                    help='Path to cityscape dataset')
-args = parser.parse_args()
+from deepLabv3.argLoader import ArgLoader
 
 
 def main():
     assert torch.cuda.is_available()
+    argloader = ArgLoader()
+    args = argloader.args
 
     torch.backends.cudnn.benchmark = True
-    model_fname = 'data/deeplab_{0}_{1}_v3_{2}_epoch%d.pth'.format(
-      args.backbone, args.dataset, args.exp)
     if args.dataset == 'pascal':
         dataset = VOCSegmentation(
                     args.voc_path,
@@ -71,16 +29,7 @@ def main():
                 train=args.train, crop_size=args.crop_size)
     else:
         raise ValueError('Unknown dataset: {}'.format(args.dataset))
-    if args.backbone == 'resnet101':
-        model = getattr(deeplab, 'resnet101')(
-            pretrained=(not args.scratch),
-            num_classes=len(dataset.CLASSES),
-            num_groups=args.groups,
-            weight_std=args.weight_std,
-            beta=args.beta)
-    else:
-        raise ValueError('Unknown backbone: {}'.format(args.backbone))
-
+    model, model_fname = load_model(args, dataset.CLASSES)
     detector = Detector(model)
     if args.train:
         detector.train(dataset, model_fname, args)
@@ -102,6 +51,7 @@ def main():
 
         for i in range(len(dataset)):
             prev_time = time.time()
+
             inputs, target, fname = dataset[i]
 
             pred = detector.inference(inputs)
