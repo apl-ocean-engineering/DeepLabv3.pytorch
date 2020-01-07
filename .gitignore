@@ -1,3 +1,4 @@
 data/*.pth
+deepLabv3.egg-info/*
 data/val/*
 *.pyc
