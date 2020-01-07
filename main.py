@@ -17,7 +17,7 @@ import deepLabv3.deeplab as deeplab
 from deepLabv3.pascal import VOCSegmentation
 from deepLabv3.cityscapes import Cityscapes
 from deepLabv3.utils import AverageMeter, inter_and_union, create_color_cv_image
-from deepLabv3.train import Detector
+from deepLabv3.detector import Detector
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--train', action='store_true', default=False,
