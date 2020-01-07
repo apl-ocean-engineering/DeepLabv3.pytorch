@@ -42,7 +42,9 @@ class VOCSegmentation(data.Dataset):
         self.masks.append(_mask)
 
   def __getitem__(self, index):
+    _fname = self.images[index]
     _img = Image.open(self.images[index]).convert('RGB')
+
     _target = Image.open(self.masks[index])
 
     _img, _target = preprocess(_img, _target,
@@ -56,11 +58,10 @@ class VOCSegmentation(data.Dataset):
     if self.target_transform is not None:
       _target = self.target_transform(_target)
 
-    return _img, _target
+    return _img, _target, _fname
 
   def __len__(self):
     return len(self.images)
 
   def download(self):
     raise NotImplementedError('Automatic download not yet implemented.')
-

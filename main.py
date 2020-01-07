@@ -10,10 +10,13 @@ from scipy.io import loadmat
 from torch.autograd import Variable
 from torchvision import transforms
 
+import cv2
+import time
+
 import deeplab
 from pascal import VOCSegmentation
 from cityscapes import Cityscapes
-from utils import AverageMeter, inter_and_union
+from utils import AverageMeter, inter_and_union, create_color_cv_image
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--train', action='store_true', default=False,
@@ -26,11 +29,11 @@ parser.add_argument('--backbone', type=str, default='resnet101',
                     help='resnet101')
 parser.add_argument('--dataset', type=str, default='pascal',
                     help='pascal or cityscapes')
-parser.add_argument('--groups', type=int, default=None, 
+parser.add_argument('--groups', type=int, default=None,
                     help='num of groups for group normalization')
 parser.add_argument('--epochs', type=int, default=30,
                     help='num of training epochs')
-parser.add_argument('--batch_size', type=int, default=16,
+parser.add_argument('--batch_size', type=int, default=4,
                     help='batch size')
 parser.add_argument('--base_lr', type=float, default=0.00025,
                     help='base learning rate')
@@ -50,6 +53,10 @@ parser.add_argument('--resume', type=str, default=None,
                     help='path to checkpoint to resume from')
 parser.add_argument('--workers', type=int, default=4,
                     help='number of data loading workers')
+parser.add_argument('--voc_path', type=str, default='data/VOCdevkit',
+                    help='Path to VOC dataset')
+parser.add_argument('--cityscape_path', type=str, default='data/cityscapes',
+                    help='Path to cityscape dataset')
 args = parser.parse_args()
 
 
@@ -59,10 +66,10 @@ def main():
   model_fname = 'data/deeplab_{0}_{1}_v3_{2}_epoch%d.pth'.format(
       args.backbone, args.dataset, args.exp)
   if args.dataset == 'pascal':
-    dataset = VOCSegmentation('data/VOCdevkit',
+    dataset = VOCSegmentation(args.voc_path,
         train=args.train, crop_size=args.crop_size)
   elif args.dataset == 'cityscapes':
-    dataset = Cityscapes('data/cityscapes',
+    dataset = Cityscapes(args.cityscape_path,
         train=args.train, crop_size=args.crop_size)
   else:
     raise ValueError('Unknown dataset: {}'.format(args.dataset))
@@ -155,28 +162,54 @@ def main():
     model.eval()
     checkpoint = torch.load(model_fname % args.epochs)
     state_dict = {k[7:]: v for k, v in checkpoint['state_dict'].items() if 'tracked' not in k}
+    #print(state_dict.keys())
     model.load_state_dict(state_dict)
     cmap = loadmat('data/pascal_seg_colormap.mat')['colormap']
     cmap = (cmap * 255).astype(np.uint8).flatten().tolist()
 
     inter_meter = AverageMeter()
     union_meter = AverageMeter()
+
+
     for i in range(len(dataset)):
-      inputs, target = dataset[i]
+      prev_time = time.time()
+      inputs, target, fname = dataset[i]
+
+      input_arr = cv2.imread(fname)
+
       inputs = Variable(inputs.cuda())
       outputs = model(inputs.unsqueeze(0))
-      _, pred = torch.max(outputs, 1)
-      pred = pred.data.cpu().numpy().squeeze().astype(np.uint8)
+      y, pred = torch.max(outputs, 1)
+      pred = pred.data.cpu().numpy().squeeze().astype(np.uint8) #indies of classes
+      #print(pred)
+      #print("y", y)
+
+
+      #print(type(input_arr), input_arr.shape)
+
+
       mask = target.numpy().astype(np.uint8)
+
       imname = dataset.masks[i].split('/')[-1]
       mask_pred = Image.fromarray(pred)
       mask_pred.putpalette(cmap)
-      mask_pred.save(os.path.join('data/val', imname))
-      print('eval: {0}/{1}'.format(i + 1, len(dataset)))
 
+      #print(mask_pred.mode, np.array(mask_pred).shape)
+
+      #mask_pred.save(os.path.join('data/val', imname))
+      #
+      # img = create_color_cv_image(pred, cmap)
+      #
+      # #cv2.imshow("img", input_arr)
+      # #cv2.imshow("pred", img)
+      # #cv2.waitKey(10)
+      # print('eval: {0}/{1}'.format(i + 1, len(dataset)))
+      #
       inter, union = inter_and_union(pred, mask, len(dataset.CLASSES))
       inter_meter.update(inter)
       union_meter.update(union)
+
+      print("time elapsed", time.time() - prev_time)
 
     iou = inter_meter.sum / (union_meter.sum + 1e-10)
     for i, val in enumerate(iou):

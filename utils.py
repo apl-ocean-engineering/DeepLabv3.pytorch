@@ -90,3 +90,18 @@ def preprocess(image, mask, flip=False, scale=None, crop=None):
 
   return image, mask
 
+
+def create_color_cv_image(pred, cmap):
+    img = np.zeros((pred.shape[0], pred.shape[1], 3))
+    #print(len(cmap))
+    cmap = np.array(cmap).reshape((-1, 3))
+    #print(cmap.shape)
+
+    for y in range(0, pred.shape[0]):
+      for x in range(0, pred.shape[1]):
+        val = pred[y,x]
+        color = cmap[val, :]
+        img[y,x] = color
+
+
+    return img
