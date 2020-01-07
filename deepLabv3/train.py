@@ -11,27 +11,27 @@ from deepLabv3.utils import AverageMeter
 
 
 class Detector:
-    def __init__(self):
-        pass
+    def __init__(self, model):
+        self.model = model
 
-    def train(self, dataset, model, model_fname, args):
+    def train(self, dataset, model_fname, args):
         criterion = nn.CrossEntropyLoss(ignore_index=255)
-        model = nn.DataParallel(model).cuda()
-        model.train()
+        self.model = nn.DataParallel(self.model).cuda()
+        self.model.train()
         if args.freeze_bn:
-          for m in model.modules():
+          for m in self.model.modules():
             if isinstance(m, nn.BatchNorm2d):
               m.eval()
               m.weight.requires_grad = False
               m.bias.requires_grad = False
         backbone_params = (
-            list(model.module.conv1.parameters()) +
-            list(model.module.bn1.parameters()) +
-            list(model.module.layer1.parameters()) +
-            list(model.module.layer2.parameters()) +
-            list(model.module.layer3.parameters()) +
-            list(model.module.layer4.parameters()))
-        last_params = list(model.module.aspp.parameters())
+            list(self.model.module.conv1.parameters()) +
+            list(self.model.module.bn1.parameters()) +
+            list(self.model.module.layer1.parameters()) +
+            list(self.model.module.layer2.parameters()) +
+            list(self.model.module.layer3.parameters()) +
+            list(self.model.module.layer4.parameters()))
+        last_params = list(self.model.module.aspp.parameters())
         optimizer = optim.SGD([
           {'params': filter(lambda p: p.requires_grad, backbone_params)},
           {'params': filter(lambda p: p.requires_grad, last_params)}],
@@ -50,7 +50,7 @@ class Detector:
             print('=> loading checkpoint {0}'.format(args.resume))
             checkpoint = torch.load(args.resume)
             start_epoch = checkpoint['epoch']
-            model.load_state_dict(checkpoint['state_dict'])
+            self.model.load_state_dict(checkpoint['state_dict'])
             optimizer.load_state_dict(checkpoint['optimizer'])
             print('=> loaded checkpoint {0} (epoch {1})'.format(
               args.resume, checkpoint['epoch']))
@@ -58,7 +58,7 @@ class Detector:
             print('=> no checkpoint found at {0}'.format(args.resume))
 
         for epoch in range(start_epoch, args.epochs):
-          for i, (inputs, target) in enumerate(dataset_loader):
+          for i, (inputs, target, x) in enumerate(dataset_loader):
             cur_iter = epoch * len(dataset_loader) + i
             lr = args.base_lr * (1 - float(cur_iter) / max_iter) ** 0.9
             optimizer.param_groups[0]['lr'] = lr
@@ -66,7 +66,7 @@ class Detector:
 
             inputs = Variable(inputs.cuda())
             target = Variable(target.cuda())
-            outputs = model(inputs)
+            outputs = self.model(inputs)
             loss = criterion(outputs, target)
             if np.isnan(loss.item()) or np.isinf(loss.item()):
               pdb.set_trace()
@@ -82,9 +82,17 @@ class Detector:
                   'loss: {loss.val:.4f} ({loss.ema:.4f})'.format(
                   epoch + 1, i + 1, len(dataset_loader), lr, loss=losses))
 
-          # if epoch % 10 == 9:
-          #   torch.save({
-          #     'epoch': epoch + 1,
-          #     'state_dict': model.state_dict(),
-          #     'optimizer': optimizer.state_dict(),
-          #     }, model_fname % (epoch + 1))
+          if epoch % 10 == 9:
+            torch.save({
+              'epoch': epoch + 1,
+              'state_dict': self.model.state_dict(),
+              'optimizer': optimizer.state_dict(),
+              }, model_fname % (epoch + 1))
+
+    def inference(self, inputs):
+      inputs = Variable(inputs.cuda())
+      outputs = self.model(inputs.unsqueeze(0))
+      y, pred = torch.max(outputs, 1)
+      pred = pred.data.cpu().numpy().squeeze().astype(np.uint8) #indies of classes
+
+      return pred
