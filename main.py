@@ -13,10 +13,11 @@ from torchvision import transforms
 import cv2
 import time
 
-import deeplab
-from pascal import VOCSegmentation
-from cityscapes import Cityscapes
-from utils import AverageMeter, inter_and_union, create_color_cv_image
+import deepLabv3.deeplab as deeplab
+from deepLabv3.pascal import VOCSegmentation
+from deepLabv3.cityscapes import Cityscapes
+from deepLabv3.utils import AverageMeter, inter_and_union, create_color_cv_image
+from deepLabv3.train import Detector
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--train', action='store_true', default=False,
@@ -62,6 +63,7 @@ args = parser.parse_args()
 
 def main():
   assert torch.cuda.is_available()
+  detector = Detector()
   torch.backends.cudnn.benchmark = True
   model_fname = 'data/deeplab_{0}_{1}_v3_{2}_epoch%d.pth'.format(
       args.backbone, args.dataset, args.exp)
@@ -84,6 +86,7 @@ def main():
     raise ValueError('Unknown backbone: {}'.format(args.backbone))
 
   if args.train:
+    #detector.train(dataset, model, model_fname, args)
     criterion = nn.CrossEntropyLoss(ignore_index=255)
     model = nn.DataParallel(model).cuda()
     model.train()
@@ -111,6 +114,8 @@ def main():
     max_iter = args.epochs * len(dataset_loader)
     losses = AverageMeter()
     start_epoch = 0
+
+    print(dataset_loader)
 
     if args.resume:
       if os.path.isfile(args.resume):
